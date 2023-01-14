@@ -1,0 +1,57 @@
+name: Prepare a static build of Qt
+description: Static Qt builds are not readily available and have to be built from source, this action automates that.
+branding:
+  icon: book-open
+  color: green
+
+inputs:
+  version:
+    type: string
+    description: The version of Qt which should be installed, e.g. 6.4.2
+    required: true
+    default: 6.4.2
+  configure-args:
+    type: string
+    description: Additional arguments passed to Qt configure, consult Qt documentation for the full list
+    required: true
+    default: -opensource
+  dir:
+    type: string
+    description: The directory where Qt should be installed
+    required: true
+    default: ${{ runner.temp }}/Qt-static
+  submodules:
+    type: string
+    description: Comma separated list of Qt modules which should be included, e.g. qtbase,qtshadertools,qtdeclarative
+    required: true
+    default: essential
+
+runs:
+  using: composite
+  steps:
+    - name: Set up X11 dependencies on Linux
+      run: |
+        sudo apt-get update
+        sudo apt-get install libgl1-mesa-dev libfontconfig1-dev libfreetype6-dev libx11-dev libx11-xcb-dev libxext-dev libxfixes-dev libxi-dev libxrender-dev libxcb1-dev libxcb-glx0-dev libxcb-keysyms1-dev libxcb-image0-dev libxcb-shm0-dev libxcb-icccm4-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-shape0-dev libxcb-randr0-dev libxcb-render-util0-dev libxcb-util-dev libxcb-xinerama0-dev libxcb-xkb-dev libxkbcommon-dev libxkbcommon-x11-dev libatspi2.0-dev dbus-x11 libpcre2-dev
+      shell: bash
+      if: runner.os == 'Linux'
+
+    - name: Set up Visual Studio shell on Windows
+      uses: egor-tensin/vs-shell@v2
+      with:
+        arch: x64
+      if: runner.os == 'Windows'
+
+    - name: Install Qt
+      working-directory: ${{ runner.temp }}
+      shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
+      run: |
+        git clone https://code.qt.io/qt/qt5.git qt
+        cd qt
+        git checkout v${{ inputs.version }}
+        perl init-repository --module-subset=${{ inputs.submodules }}
+        mkdir build
+        cd build
+        ../configure ${{ runner.os == 'Windows' && '-platform win32-msvc' || '' }} -prefix ${{ inputs.dir }} -release -static -static-runtime ${{ inputs.configure-args }}
+        cmake --build . --parallel 2
+        cmake --install .
